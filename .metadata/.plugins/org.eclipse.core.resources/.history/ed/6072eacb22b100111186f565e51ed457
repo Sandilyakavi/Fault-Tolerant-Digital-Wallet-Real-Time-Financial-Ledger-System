@@ -1,0 +1,5 @@
+package com.payvault.wallet.repository;
+
+public class WalletRepository {
+
+}

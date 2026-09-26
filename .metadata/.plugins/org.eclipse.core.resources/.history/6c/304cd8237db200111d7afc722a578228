@@ -1,0 +1,5 @@
+package com.payvault.auth.repository;
+
+public class AuthUserRepository {
+
+}

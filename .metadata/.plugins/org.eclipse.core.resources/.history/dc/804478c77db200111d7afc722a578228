@@ -1,0 +1,5 @@
+package com.payvault.auth.util;
+
+public class JwtUtil {
+
+}

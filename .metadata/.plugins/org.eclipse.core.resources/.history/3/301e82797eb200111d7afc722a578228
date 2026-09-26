@@ -1,0 +1,5 @@
+package com.payvault.auth.config;
+
+public class SecurityConfig {
+
+}

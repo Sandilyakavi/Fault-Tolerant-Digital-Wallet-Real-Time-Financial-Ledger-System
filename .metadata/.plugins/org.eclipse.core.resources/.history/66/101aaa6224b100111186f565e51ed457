@@ -1,0 +1,5 @@
+package com.payvault.wallet.controller;
+
+public class WalletController {
+
+}

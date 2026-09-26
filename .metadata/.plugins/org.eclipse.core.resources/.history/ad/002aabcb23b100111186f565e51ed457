@@ -1,0 +1,5 @@
+package com.payvault.wallet.service;
+
+public class WalletServiceImpl {
+
+}

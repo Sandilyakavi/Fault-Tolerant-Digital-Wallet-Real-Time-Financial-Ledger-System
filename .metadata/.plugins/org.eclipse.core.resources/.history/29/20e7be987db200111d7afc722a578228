@@ -1,0 +1,5 @@
+package com.payvault.auth.dto;
+
+public class LoginRequest {
+
+}

@@ -1,0 +1,182 @@
+package com.payvault.wallet.service;
+
+import com.payvault.wallet.client.UserClient;
+import com.payvault.wallet.dto.WalletRequest;
+import com.payvault.wallet.dto.WalletResponse;
+import com.payvault.wallet.entity.Wallet;
+import com.payvault.wallet.exception.InsufficientBalanceException;
+import com.payvault.wallet.exception.WalletNotFoundException;
+import com.payvault.wallet.repository.WalletRepository;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+@Service
+public class WalletServiceImpl implements WalletService {
+
+    private final WalletRepository walletRepository;
+    private final UserClient userClient;
+
+    public WalletServiceImpl(
+            WalletRepository walletRepository,
+            UserClient userClient) {
+
+        this.walletRepository = walletRepository;
+        this.userClient = userClient;
+    }
+
+    @Override
+    @Transactional
+    public WalletResponse createWallet(WalletRequest request) {
+
+        try {
+            userClient.getUserById(request.getUserId());
+        } catch (Exception ex) {
+            throw new IllegalArgumentException(
+                    "User not found with id: " + request.getUserId()
+            );
+        }
+
+        if (walletRepository.existsByUserId(request.getUserId())) {
+            throw new IllegalArgumentException(
+                    "Wallet already exists for user id: "
+                            + request.getUserId()
+            );
+        }
+
+        Wallet wallet = new Wallet(request.getUserId());
+
+        Wallet savedWallet = walletRepository.save(wallet);
+
+        return mapToResponse(savedWallet);
+    }
+
+    @Override
+    public WalletResponse getWalletById(Long id) {
+
+        Wallet wallet = walletRepository.findById(id)
+                .orElseThrow(() ->
+                        new WalletNotFoundException(
+                                "Wallet not found with id: " + id
+                        )
+                );
+
+        return mapToResponse(wallet);
+    }
+
+    @Override
+    public WalletResponse getWalletByUserId(Long userId) {
+
+        Wallet wallet = walletRepository.findByUserId(userId)
+                .orElseThrow(() ->
+                        new WalletNotFoundException(
+                                "Wallet not found for user id: " + userId
+                        )
+                );
+
+        return mapToResponse(wallet);
+    }
+
+    @Override
+    public List<WalletResponse> getAllWallets() {
+
+        return walletRepository.findAll()
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public WalletResponse credit(
+            Long userId,
+            BigDecimal amount) {
+
+        validateAmount(amount);
+
+        Wallet wallet = walletRepository.findByUserId(userId)
+                .orElseThrow(() ->
+                        new WalletNotFoundException(
+                                "Wallet not found for user id: " + userId
+                        )
+                );
+
+        wallet.setBalance(
+                wallet.getBalance().add(amount)
+        );
+
+        Wallet updatedWallet = walletRepository.save(wallet);
+
+        return mapToResponse(updatedWallet);
+    }
+
+    @Override
+    @Transactional
+    public WalletResponse debit(
+            Long userId,
+            BigDecimal amount) {
+
+        validateAmount(amount);
+
+        Wallet wallet = walletRepository.findByUserId(userId)
+                .orElseThrow(() ->
+                        new WalletNotFoundException(
+                                "Wallet not found for user id: " + userId
+                        )
+                );
+
+        if (wallet.getBalance().compareTo(amount) < 0) {
+            throw new InsufficientBalanceException(
+                    "Insufficient wallet balance"
+            );
+        }
+
+        wallet.setBalance(
+                wallet.getBalance().subtract(amount)
+        );
+
+        Wallet updatedWallet = walletRepository.save(wallet);
+
+        return mapToResponse(updatedWallet);
+    }
+
+    @Override
+    @Transactional
+    public void deleteWallet(Long id) {
+
+        Wallet wallet = walletRepository.findById(id)
+                .orElseThrow(() ->
+                        new WalletNotFoundException(
+                                "Wallet not found with id: " + id
+                        )
+                );
+
+        walletRepository.delete(wallet);
+    }
+
+    private void validateAmount(BigDecimal amount) {
+
+        if (amount == null ||
+                amount.compareTo(BigDecimal.ZERO) <= 0) {
+
+            throw new IllegalArgumentException(
+                    "Amount must be greater than zero"
+            );
+        }
+    }
+
+    private WalletResponse mapToResponse(Wallet wallet) {
+
+        return new WalletResponse(
+                wallet.getId(),
+                wallet.getUserId(),
+                wallet.getBalance(),
+                wallet.getCurrency(),
+                wallet.getCreatedAt(),
+                wallet.getUpdatedAt()
+        );
+    }
+}

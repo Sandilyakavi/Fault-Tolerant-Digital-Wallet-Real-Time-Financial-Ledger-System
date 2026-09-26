@@ -1,0 +1,5 @@
+package com.payvault.user.exception;
+
+public class GlobalExceptionHandler {
+
+}

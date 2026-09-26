@@ -1,0 +1,5 @@
+package com.payvault.auth.service;
+
+public class AuthService {
+
+}

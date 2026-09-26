@@ -1,0 +1,173 @@
+package com.payvault.transaction.service;
+
+import com.payvault.transaction.client.UserClient;
+import com.payvault.transaction.client.WalletClient;
+import com.payvault.transaction.dto.TransactionResponse;
+import com.payvault.transaction.dto.TransferRequest;
+import com.payvault.transaction.entity.Transaction;
+import com.payvault.transaction.entity.TransactionStatus;
+import com.payvault.transaction.repository.TransactionRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+@Service
+public class TransactionServiceImpl implements TransactionService {
+
+    private final TransactionRepository transactionRepository;
+    private final UserClient userClient;
+    private final WalletClient walletClient;
+
+    public TransactionServiceImpl(
+            TransactionRepository transactionRepository,
+            UserClient userClient,
+            WalletClient walletClient
+    ) {
+        this.transactionRepository = transactionRepository;
+        this.userClient = userClient;
+        this.walletClient = walletClient;
+    }
+
+    @Override
+    @Transactional
+    public TransactionResponse transfer(TransferRequest request) {
+
+        if (request.getSenderUserId().equals(request.getReceiverUserId())) {
+            throw new IllegalArgumentException(
+                    "Sender and receiver cannot be the same"
+            );
+        }
+
+        // Validate sender
+        try {
+            userClient.getUserById(request.getSenderUserId());
+        } catch (Exception ex) {
+            throw new IllegalArgumentException(
+                    "Sender user not found with id: "
+                            + request.getSenderUserId()
+            );
+        }
+
+        // Validate receiver
+        try {
+            userClient.getUserById(request.getReceiverUserId());
+        } catch (Exception ex) {
+            throw new IllegalArgumentException(
+                    "Receiver user not found with id: "
+                            + request.getReceiverUserId()
+            );
+        }
+
+        Transaction transaction = new Transaction(
+                request.getSenderUserId(),
+                request.getReceiverUserId(),
+                request.getAmount()
+        );
+
+        try {
+
+            // Debit sender
+            walletClient.debit(
+                    request.getSenderUserId(),
+                    request.getAmount()
+            );
+
+            try {
+
+                // Credit receiver
+                walletClient.credit(
+                        request.getReceiverUserId(),
+                        request.getAmount()
+                );
+
+            } catch (Exception creditException) {
+
+                // Compensation:
+                // Receiver credit failed, so refund sender
+                try {
+                    walletClient.credit(
+                            request.getSenderUserId(),
+                            request.getAmount()
+                    );
+                } catch (Exception compensationException) {
+                    // Compensation failure will be handled later
+                }
+
+                transaction.setStatus(TransactionStatus.FAILED);
+                Transaction saved = transactionRepository.save(transaction);
+
+                throw new IllegalArgumentException(
+                        "Transfer failed while crediting receiver"
+                );
+            }
+
+            transaction.setStatus(TransactionStatus.COMPLETED);
+
+        } catch (Exception ex) {
+
+            if (transaction.getStatus() != TransactionStatus.FAILED) {
+                transaction.setStatus(TransactionStatus.FAILED);
+                transactionRepository.save(transaction);
+            }
+
+            throw new IllegalArgumentException(
+                    "Transfer failed: " + ex.getMessage()
+            );
+        }
+
+        Transaction saved = transactionRepository.save(transaction);
+
+        return mapToResponse(saved);
+    }
+
+    @Override
+    public TransactionResponse getTransactionById(Long id) {
+
+        Transaction transaction = transactionRepository.findById(id)
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Transaction not found with id: " + id
+                        )
+                );
+
+        return mapToResponse(transaction);
+    }
+
+    @Override
+    public List<TransactionResponse> getAllTransactions() {
+
+        return transactionRepository.findAll()
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Override
+    public List<TransactionResponse> getUserTransactions(Long userId) {
+
+        List<Transaction> sent =
+                transactionRepository.findBySenderUserId(userId);
+
+        List<Transaction> received =
+                transactionRepository.findByReceiverUserId(userId);
+
+        return java.util.stream.Stream
+                .concat(sent.stream(), received.stream())
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    private TransactionResponse mapToResponse(Transaction transaction) {
+
+        return new TransactionResponse(
+                transaction.getId(),
+                transaction.getSenderUserId(),
+                transaction.getReceiverUserId(),
+                transaction.getAmount(),
+                transaction.getStatus(),
+                transaction.getCreatedAt()
+        );
+    }
+}

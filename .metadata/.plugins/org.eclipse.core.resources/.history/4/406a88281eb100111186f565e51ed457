@@ -1,0 +1,5 @@
+package com.payvault.user.dto;
+
+public class UserResponse {
+
+}
