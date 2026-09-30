@@ -1,5 +1,0 @@
-package com.payvault.transaction.client;
-
-public class WalletClient {
-
-}

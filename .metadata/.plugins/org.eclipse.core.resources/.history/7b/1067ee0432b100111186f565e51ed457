@@ -1,5 +1,0 @@
-package com.payvault.transaction.dto;
-
-public class WalletResponse {
-
-}

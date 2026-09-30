@@ -1,5 +1,0 @@
-package com.payvault.gateway.util;
-
-public class JwtUtil {
-
-}

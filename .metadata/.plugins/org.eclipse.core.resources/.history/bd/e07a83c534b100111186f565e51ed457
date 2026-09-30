@@ -1,5 +1,0 @@
-package com.payvault.transaction.exception;
-
-public class InvalidTransferException {
-
-}
